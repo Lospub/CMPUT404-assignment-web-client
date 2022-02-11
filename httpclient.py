@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
-# Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
+# Copyright 2022 Junyao Cui, Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,21 +33,31 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    def get_host_port(self,url):
+        components = urllib.parse.urlparse(url)
+        host = components.hostname
+        port = components.port
+        path = components.path
+        # define defualt value if there is no values
+        if port is None:
+            port = 80
+        if not path:  
+            path = '/'
+        return host, port, path
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
-        return None
+        # return None
 
     def get_code(self, data):
-        return None
+        return int(data.split()[1])
 
     def get_headers(self,data):
-        return None
+        return data.split('\r\n\r\n')[0]
 
     def get_body(self, data):
-        return None
+        return data.split('\r\n\r\n')[-1]
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -68,13 +78,59 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        # define address info
+        host, port, path = self.get_host_port(url)
+
+        # make the socket and connect
+        self.connect(host, port)
+
+        # define payload
+        payload = f'GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n'
+
+        # send the data
+        self.sendall(payload)
+
+        response = self.recvall(self.socket)
+
+        header = self.get_headers(response)
+        code = self.get_code(response)
+        body = self.get_body(response)
+
+        print(response)
+
+        # shutdown
+        self.close()
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
+        # define address info
+        host, port, path = self.get_host_port(url)
+
+        # make the socket and connect
+        self.connect(host, port)
+
+        # define payload and content
+        content = "" 
+        if args:
+            content = urllib.parse.urlencode(args)
+        content_length = len(content)
+        content_type = "application/x-www-form-urlencoded"
+        payload = f'POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n'
+        payload_content = payload + content
+
+        # send the data
+        self.sendall(payload_content)
+
+        response = self.recvall(self.socket)
+        
+        header = self.get_headers(response)
+        code = self.get_code(response)
+        body = self.get_body(response)
+
+        print(response)
+
+        # shutdown
+        self.close()
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
